@@ -1,5 +1,6 @@
 import concurrent
 import collections
+import shutil
 import numpy as np
 import os
 from PIL import Image
@@ -8,7 +9,10 @@ from functools import partial
 import sys
 import argparse
 
-import zarr
+try:
+    import zarr
+except ImportError:  # Optional dependency
+    zarr = None
 from pldm_envs.diverse_maze.transforms import select_transforms
 
 import torch
@@ -79,6 +83,17 @@ def main():
         args.save_path = args.data_path
 
     config = torch.load(f"{args.data_path}/metadata.pt")
+    # Use the actual number of splits from data.p to avoid metadata mismatch.
+    proprio_path = os.path.join(args.data_path, "data.p")
+    all_splits = torch.load(proprio_path)
+    if "diverse" in config.get("env", ""):
+        config = dict(config)
+        total_splits = len(all_splits)
+        if args.stop_at_episode != sys.maxsize:
+            total_splits = min(total_splits, args.stop_at_episode)
+            args.stop_at_episode = total_splits
+        config["n_episodes"] = total_splits
+        config["train_maps_n"] = 1
 
     image_list = list_images(args, config=config)
     num_images = len(image_list)
@@ -107,13 +122,34 @@ def main():
 
     data_chunks = (10000, *img_size)
 
-    # Initialize the Zarr dataset
-    zarr_dataset = zarr.create(
-        path=f"{args.data_path}/images.zarr",
-        shape=data_shape,
-        chunks=data_chunks,
-        dtype=np.uint8,
+    # Check for available space before creating a large output file.
+    required_bytes = int(num_images) * int(h) * int(w) * int(ch)
+    free_bytes = shutil.disk_usage(args.save_path).free
+    if free_bytes < required_bytes:
+        raise RuntimeError(
+            "Not enough free disk space for images.npy. "
+            "Use --stop_at_episode to write a smaller subset or free space. "
+            f"Required: {required_bytes / (1024**3):.1f} GB, "
+            f"Free: {free_bytes / (1024**3):.1f} GB."
+        )
+
+    # Initialize output storage. Use a memmap so we do not load everything into RAM.
+    npy_path = os.path.join(args.save_path, "images.npy")
+    tmp_npy_path = npy_path + ".tmp"
+    if os.path.exists(tmp_npy_path):
+        os.remove(tmp_npy_path)
+    images_mmap = np.lib.format.open_memmap(
+        tmp_npy_path, mode="w+", dtype=np.uint8, shape=data_shape
     )
+
+    zarr_dataset = None
+    if zarr is not None:
+        zarr_dataset = zarr.create(
+            path=os.path.join(args.save_path, "images.zarr"),
+            shape=data_shape,
+            chunks=data_chunks,
+            dtype=np.uint8,
+        )
 
     image_transform = select_transforms(config["env"])
     process_image_with_transform = partial(process_image, image_transform, h)
@@ -143,7 +179,10 @@ def main():
                 )
             )
 
-        zarr_dataset[ctr : ctr + len(images)] = np.stack(images)
+        batch = np.stack(images)
+        images_mmap[ctr : ctr + len(images)] = batch
+        if zarr_dataset is not None:
+            zarr_dataset[ctr : ctr + len(images)] = batch
         ctr += len(images)
 
         if args.quick_debug and i > 2:
@@ -151,8 +190,10 @@ def main():
 
     if BAD_EPISODES:
         torch.save(BAD_EPISODES, f"{args.save_path}/bad_episodes.pt")
-    else:
-        np.save(f"{args.save_path}/images.npy", zarr_dataset)
+
+    # Ensure the memmap is flushed to disk and atomically replace the target.
+    images_mmap.flush()
+    os.replace(tmp_npy_path, npy_path)
 
 
 if __name__ == "__main__":

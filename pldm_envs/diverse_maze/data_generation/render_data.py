@@ -38,17 +38,19 @@ def main():
     # all_splits = d4rl_ds.splits
     all_splits = torch.load(proprio_path)
 
-    print(f"{len(all_splits)=}")
-    if args.workers_num is None:
-        indices = np.arange(len(all_splits))
+    total_splits = len(all_splits)
+    print(f"{total_splits=}")
+    if args.workers_num is None or args.workers_num <= 1:
+        indices = np.arange(total_splits)
     else:
-        per_worker = len(all_splits) // args.workers_num
-        print(f"per_worker: {per_worker}")
-        assert per_worker * args.workers_num == len(
-            all_splits
-        ), "Number of splits must be divisible by number of workers"
-        start = per_worker * args.worker_id
-        end = start + per_worker
+        if args.worker_id < 0 or args.worker_id >= args.workers_num:
+            raise ValueError("worker_id must be in [0, workers_num)")
+        per_worker = total_splits // args.workers_num
+        remainder = total_splits % args.workers_num
+        extra = 1 if args.worker_id < remainder else 0
+        start = args.worker_id * per_worker + min(args.worker_id, remainder)
+        end = start + per_worker + extra
+        print(f"per_worker: {per_worker}, remainder: {remainder}")
         print(f"start: {start}, end: {end}")
         indices = np.arange(start, end)
 
