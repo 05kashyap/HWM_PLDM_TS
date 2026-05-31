@@ -429,15 +429,29 @@ class Prober(torch.nn.Module):
         self.output_shape = output_shape
         self.arch = arch
         self.input_dim = input_dim
-
         if arch == "id":
             pass
         elif arch == "conv":
-            self.prober = build_conv(
-                PROBER_CONV_LAYERS_CONFIG[arch_subclass],
-                input_dim=input_dim,
-                output_dim=output_shape,
-            )
+            # If the upstream representation is flat (an int) the conv builder
+            # will fail because it expects an indexable input_dim like (C,H,W).
+            # Fall back to an MLP prober in that case to be robust to
+            # non-spatial embeddings (e.g., Impala + MLP encoders).
+            if isinstance(input_dim, int) or not hasattr(input_dim, "__getitem__"):
+                print(
+                    f"Warning: requested conv prober but got flat input_dim={input_dim}; falling back to MLP prober."
+                )
+                # Build a small 2-layer MLP: embedding -> hidden -> output
+                hidden = max(128, embedding // 2)
+                layers = [torch.nn.Linear(embedding, hidden), torch.nn.ReLU(True), torch.nn.Linear(hidden, self.output_shape)]
+                self.prober = torch.nn.Sequential(*layers)
+                # ensure forward uses the MLP path (which flattens inputs if needed)
+                self.arch = "mlp_fallback"
+            else:
+                self.prober = build_conv(
+                    PROBER_CONV_LAYERS_CONFIG[arch_subclass],
+                    input_dim=input_dim,
+                    output_dim=output_shape,
+                )
         else:
             if arch is None:
                 arch_list = []

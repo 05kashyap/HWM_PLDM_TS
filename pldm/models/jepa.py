@@ -229,6 +229,21 @@ class JEPA(torch.nn.Module):
             state_encs = backbone_output.encodings
         else:
             state_encs = input_states  # might be problematic for l2
+            # If input_states are already encodings (L2 case), construct a
+            # minimal BackboneOutput so downstream code that accesses
+            # proprio/location/raw_locations won't fail.
+            try:
+                backbone_output = BackboneOutput(encodings=input_states)
+            except Exception:
+                # Fallback: create a simple object with the expected attributes
+                class _BO:
+                    def __init__(self, enc):
+                        self.encodings = enc
+                        self.proprio_component = None
+                        self.location_component = None
+                        self.raw_locations = None
+
+                backbone_output = _BO(input_states)
 
         if self.config.encode_only or encode_only:
             return ForwardResult(

@@ -582,11 +582,21 @@ def build_backbone(
     if input_loc_dim:
         kwargs["locations"] = torch.randn(input_loc_dim).unsqueeze(0)
 
-    if input_proprio_dim:
-        sample_proprio_input = torch.randn(input_proprio_dim).unsqueeze(0)
-        sample_output = backbone(sample_input, proprio=sample_proprio_input, **kwargs)
-    else:
-        sample_output = backbone(sample_input, **kwargs)
+    # Some backbones (MLP) include BatchNorm layers which require batch size > 1
+    # when in training mode. We only run the backbone here to infer output
+    # shapes — run it in eval mode and under torch.no_grad() so BatchNorm or
+    # other training-only behavior does not error on a single-sample input.
+    was_training = backbone.training if hasattr(backbone, "training") else False
+    backbone.eval()
+    with torch.no_grad():
+        if input_proprio_dim:
+            sample_proprio_input = torch.randn(input_proprio_dim).unsqueeze(0)
+            sample_output = backbone(sample_input, proprio=sample_proprio_input, **kwargs)
+        else:
+            sample_output = backbone(sample_input, **kwargs)
+    # restore training state
+    if was_training:
+        backbone.train()
 
     output_dim = tuple(sample_output.encodings.shape[1:])
     output_dim = output_dim[0] if len(output_dim) == 1 else output_dim
