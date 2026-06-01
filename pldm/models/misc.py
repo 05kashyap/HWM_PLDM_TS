@@ -262,13 +262,20 @@ class Posterior(torch.nn.Module):
         return posterior_mu, posterior_var
 
 
+# def build_projector(arch: str, embedding: int):
+#     if arch == "id":
+#         return nn.Identity(), embedding
+#     else:
+#         f = [embedding] + list(map(int, arch.split("-")))
+#         return build_mlp(f), f[-1]
+
 def build_projector(arch: str, embedding: int):
     if arch == "id":
         return nn.Identity(), embedding
     else:
         f = [embedding] + list(map(int, arch.split("-")))
-        return build_mlp(f), f[-1]
-
+        # Explicitly force layer_norm to handle 3D sequence tensors safely
+        return build_mlp(f, norm="layer_norm"), f[-1]
 
 def build_norm1d(norm: str, dim: int):
     if norm == "batch_norm":
