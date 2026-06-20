@@ -7,6 +7,7 @@ from pldm.objectives.idm import IDMObjective, IDMObjectiveConfig  # noqa
 from pldm.objectives.kl import KLObjective, KLObjectiveConfig
 from pldm.objectives.prediction import PredictionObjective, PredictionObjectiveConfig
 from pldm.objectives.probe import ProbeObjective, ProbeObjectiveConfig
+from pldm.objectives.temporal_straightening import TemporalStraighteningObjective, TemporalStraighteningConfig
 
 
 class ObjectiveType(enum.Enum):
@@ -25,6 +26,8 @@ class ObjectiveType(enum.Enum):
     PredictionRawLocation = enum.auto()
     ProbeLocation = enum.auto()
     ProbeProprioVel = enum.auto()
+    # 1. ADDED TO ENUM
+    TemporalStraighteningObs = enum.auto()
 
 
 @dataclass
@@ -41,6 +44,7 @@ class ObjectivesConfig:
     prediction_proprio: PredictionObjectiveConfig = PredictionObjectiveConfig()
     prediction_raw_location: PredictionObjectiveConfig = PredictionObjectiveConfig()
     probe: ProbeObjectiveConfig = ProbeObjectiveConfig()
+    temporal_straightening_obs: TemporalStraighteningConfig = TemporalStraighteningConfig()
 
     def build_objectives_list(
         self,
@@ -138,6 +142,16 @@ class ObjectivesConfig:
                         repr_dim=repr_dim,
                         pred_dim=2,
                         probe_target="proprio_vel",
+                    )
+                )
+            # 3. ADDED TO BUILDER LOGIC
+            elif objective_type == ObjectiveType.TemporalStraighteningObs:
+                objectives.append(
+                    TemporalStraighteningObjective(
+                        self.temporal_straightening_obs,
+                        name_prefix=name_prefix,
+                        repr_dim=repr_dim,
+                        pred_attr="obs"
                     )
                 )
             else:
