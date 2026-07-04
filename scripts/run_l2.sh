@@ -7,7 +7,8 @@ export WANDB_MODE=disabled
 # ==========================================
 # SHARED ENVIRONMENT VARIABLES
 # ==========================================
-ROOT=/home/shanveen-ortho-clinic/Documents/Projects/worldmodels/HWM_PLDM_TS
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TRAIN_DATA_ROOT="$ROOT/pldm_envs/diverse_maze/datasets/maze2d_large_diverse_25maps"
 
 TRAIN_DATA_PATH="$TRAIN_DATA_ROOT/data.p"

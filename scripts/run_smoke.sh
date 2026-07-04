@@ -3,7 +3,8 @@ set -euo pipefail
 
 export WANDB_MODE=disabled
 
-ROOT=/home/shanveen-ortho-clinic/Documents/Projects/worldmodels/HWM_PLDM_TS
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SMOKE_ROOT="$ROOT/checkpoint/maze2d_large_diverse_smoke"
 L1_DIR="$SMOKE_ROOT/maze2d_large_diverse"
 L2_DIR="$SMOKE_ROOT/l2_wo_encoder/maze2d_large_diverse"

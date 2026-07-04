@@ -13,25 +13,31 @@ Which will download two ckpts:
 To evaluate hierarchical planning on the downloaded HWM ckpt:
 
 ```
-python train.py --config configs/diverse_maze/icml/large_diverse_25maps_l2.yaml --values eval_only=true load_l1_only=false load_checkpoint_path=<repo_root>/pldm/pretrained/load_from_l1248-seed248_epoch=5_sample_step=10789632.ckpt
+python train.py --configs configs/diverse_maze/icml/large_diverse_25maps_l2.yaml \
+  --values root_path=<repo_root> eval_only=true load_l1_only=false \
+  load_checkpoint_path=<repo_root>/pldm/pretrained/load_from_l1248-seed248_epoch=5_sample_step=10789632.ckpt
 ```
 
 To evaluate flat planning on the downloaded PLDM ckpt:
 
 ```
-python train.py --config configs/diverse_maze/icml/large_diverse_25maps.yaml --values eval_only=true load_checkpoint_path=<repo_root>/pldm/pretrained/3-9-1-seed248_epoch=3_sample_step=15465472.ckpt
+python train.py --configs configs/diverse_maze/icml/large_diverse_25maps.yaml \
+  --values root_path=<repo_root> eval_only=true \
+  load_checkpoint_path=<repo_root>/pldm/pretrained/3-9-1-seed248_epoch=3_sample_step=15465472.ckpt
 ```
 
 To train the HWM (2 levels) on the large-maze setting by loading the downloaded level 1 PLDM model , run:
 
 ```
-python train.py --config configs/diverse_maze/icml/large_diverse_25maps_l2.yaml
+python train.py --configs configs/diverse_maze/icml/large_diverse_25maps_l2.yaml \
+  --values root_path=<repo_root>
 ```
 
 If you prefer to train the level-1 PLDM world model from scratch, run:
 
 ```
-python train.py --config configs/diverse_maze/icml/large_diverse_25maps.yaml
+python train.py --configs configs/diverse_maze/icml/large_diverse_25maps.yaml \
+  --values root_path=<repo_root>
 ```
 
 Then later if you want to train a HWM model by loading the newly trained level 1 WM, update `load_checkpoint_path` in `configs/diverse_maze/icml/large_diverse_25maps_l2.yaml` to point to your trained level-1 checkpoint, and run the level-2 training command above.

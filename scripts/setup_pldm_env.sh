@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Usage: source scripts/setup_pldm_env.sh [--rebuild]
-# - Default: set env vars + symlinks only.
+# - Default: activate env, set env vars, patch native MuJoCo/mujoco_py files,
+#   and create symlinks.
 # - --rebuild: also clears mujoco_py cache and forces a rebuild.
 
 # Ensure the script is sourced so env vars persist.
@@ -19,12 +20,13 @@ if ! command -v conda >/dev/null 2>&1; then
 fi
 
 if command -v conda >/dev/null 2>&1; then
-  conda activate pldm
+  conda activate "${PLDM_CONDA_ENV:-pldm}"
 else
   echo "Warning: conda not found in PATH. Skipping conda activation."
 fi
 
-MUJOCO_DIR="$HOME/.mujoco/mujoco-2.1.2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MUJOCO_DIR="${MUJOCO_PY_MUJOCO_PATH:-$HOME/.mujoco/mujoco-2.1.2}"
 export MUJOCO_GL=egl
 export MUJOCO_PY_MUJOCO_PATH="$MUJOCO_DIR"
 export D4RL_SUPPRESS_IMPORT_ERROR=1
@@ -46,6 +48,10 @@ _add_to_ld_path "/usr/lib/nvidia"
 if [ -d "$MUJOCO_DIR/bin" ]; then
   ln -sf ../lib/libmujoco.so "$MUJOCO_DIR/bin/libmujoco210.so"
   ln -sf ../lib/libglewegl.so "$MUJOCO_DIR/bin/libglewegl.so"
+fi
+
+if [ -f "$SCRIPT_DIR/patch_mujoco_py_212.sh" ]; then
+  PYTHON_BIN="${PYTHON_BIN:-python}" "$SCRIPT_DIR/patch_mujoco_py_212.sh"
 fi
 
 if [ "${1-}" = "--rebuild" ]; then

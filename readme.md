@@ -47,41 +47,163 @@ Figure 1b: Hierarchical planning improves success on non-greedy, long-horizon ta
 
 
 
-# Repo Setup
+# What Is In This Repo
 
-Tested on python 3.9, CUDA 13.0
+- `pldm/`: world-model training, probing, and planning code.
+- `pldm_envs/`: Diverse Maze dataset generation, rendering, D4RL-style dataset loading, and evaluation trial generation.
+- `scripts/`: local setup, smoke tests, rendering helpers, and baseline/temporal-straightening experiment runners.
+- `pldm/pretrained/`: expected location for pretrained checkpoints. You can populate it with `python pldm/download_ckpt_from_hf.py --out-dir pldm/pretrained`.
+- `pldm_envs/diverse_maze/datasets/`: expected location for generated or downloaded datasets. This directory is created by the dataset scripts.
 
-```
-git clone git@github.com:kevinghst/HWM_PLDM.git
+# Fresh Setup
 
-cd HWM_PLDM
+This project is pinned around Python 3.9, `d4rl==1.1`, and `mujoco-py==2.1.2.14`. The legacy `mujoco-py` build is the fragile part: it needs MuJoCo 2.1.2, a few native build packages, and the local compatibility patches in `scripts/patch_mujoco_py_212.sh`.
+
+## 1) Clone and create the Python env
+
+```bash
+git clone <repo-url>
+cd HWM_PLDM_TS
 
 conda create -n pldm python=3.9 -y
-
 conda activate pldm
 
 pip install -r requirements.txt
-
 pip install -e .
 ```
 
-## MuJoCo 2.1 for d4rl + mujoco-py
+## 2) Install native build/runtime deps
+
+With conda:
+
+```bash
+conda install -c conda-forge glew mesa-libgl-devel mesa-libegl-devel libglu patchelf
+```
+
+On Ubuntu, these system packages are also commonly needed:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential libglew-dev libgl1-mesa-dev libegl1-mesa-dev libosmesa6-dev patchelf
+```
+
+## 3) Install MuJoCo 2.1.2
+
+Put the extracted MuJoCo folder at `$HOME/.mujoco/mujoco-2.1.2`:
+
+```bash
 mkdir -p "$HOME/.mujoco"
 cd "$HOME/.mujoco"
-wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
-tar -xzf mujoco210-linux-x86_64.tar.gz
+wget https://mujoco.org/download/mujoco-2.1.2-linux-x86_64.tar.gz
+tar -xzf mujoco-2.1.2-linux-x86_64.tar.gz
+```
 
-## Runtime env
-export MUJOCO_GL=egl
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HOME/.mujoco/mujoco210/bin"
-export D4RL_SUPPRESS_IMPORT_ERROR=1
+If you already have the tarball locally, just extract it so this exists:
 
-# Run Experiments
+```bash
+test -f "$HOME/.mujoco/mujoco-2.1.2/include/mjmodel.h"
+```
 
-1. Go to `pldm_envs/`, follow instructions to set up dataset for the environment of your choice
-2. Go to `pldm/`, follow instruction to run training or evaluation
+## 4) Apply MuJoCo/mujoco-py patches and rebuild
 
+From the repo root:
 
-# Datasets
+```bash
+source scripts/setup_pldm_env.sh --rebuild
+```
 
-To see the datasets we used to train our models, see folders inside pldm_envs/. The readmes there will guide you on how to download and set up the datasets
+That script:
+
+- activates the `pldm` conda env;
+- exports `MUJOCO_GL=egl`, `MUJOCO_PY_MUJOCO_PATH=$HOME/.mujoco/mujoco-2.1.2`, and `D4RL_SUPPRESS_IMPORT_ERROR=1`;
+- adds the MuJoCo `bin` directory to `LD_LIBRARY_PATH`;
+- creates `libmujoco210.so` and `libglewegl.so` symlinks expected by `mujoco-py`;
+- applies the recovered local patches to:
+  - `$HOME/.mujoco/mujoco-2.1.2/include/mjmodel.h`
+  - `<conda-env>/lib/python3.9/site-packages/mujoco_py/pxd/mjmodel.pxd`
+  - `<conda-env>/lib/python3.9/site-packages/mujoco_py/gl/eglshim.c`
+- clears `~/.cache/mujoco_py` and rebuilds `mujoco_py`.
+
+The patcher creates `.hwm-pldm.bak` backups the first time it edits each native file.
+
+For later shells, run this without rebuilding:
+
+```bash
+source scripts/setup_pldm_env.sh
+```
+
+# Data Setup
+
+Download the paper datasets and render top-down image observations:
+
+```bash
+cd pldm_envs/diverse_maze
+bash data_generation/generate_all_datasets_og.sh
+```
+
+This creates:
+
+- `pldm_envs/diverse_maze/datasets/maze2d_large_diverse_25maps/data.p`
+- `pldm_envs/diverse_maze/datasets/maze2d_large_diverse_25maps/images.npy`
+- `pldm_envs/diverse_maze/datasets/maze2d_large_diverse_probe/data.p`
+- `pldm_envs/diverse_maze/datasets/maze2d_large_diverse_probe/images.npy`
+
+To generate new maze data instead of downloading the paper data:
+
+```bash
+cd pldm_envs/diverse_maze
+bash data_generation/generate_all_datasets_new.sh
+```
+
+# Checkpoints
+
+Download pretrained checkpoints:
+
+```bash
+python pldm/download_ckpt_from_hf.py --out-dir pldm/pretrained
+```
+
+Expected files:
+
+- `pldm/pretrained/3-9-1-seed248_epoch=3_sample_step=15465472.ckpt`
+- `pldm/pretrained/load_from_l1248-seed248_epoch=5_sample_step=10789632.ckpt`
+
+# Run
+
+Quick sanity check:
+
+```bash
+bash scripts/run_smoke.sh
+```
+
+Evaluate pretrained flat PLDM:
+
+```bash
+cd pldm
+python train.py --configs configs/diverse_maze/icml/large_diverse_25maps.yaml \
+  --values root_path="$(cd .. && pwd)" eval_only=true \
+  load_checkpoint_path="$(cd .. && pwd)/pldm/pretrained/3-9-1-seed248_epoch=3_sample_step=15465472.ckpt"
+```
+
+Evaluate pretrained HWM:
+
+```bash
+cd pldm
+python train.py --configs configs/diverse_maze/icml/large_diverse_25maps_l2.yaml \
+  --values root_path="$(cd .. && pwd)" eval_only=true load_l1_only=false \
+  load_checkpoint_path="$(cd .. && pwd)/pldm/pretrained/load_from_l1248-seed248_epoch=5_sample_step=10789632.ckpt"
+```
+
+Full local experiment scripts:
+
+```bash
+bash scripts/run.sh
+bash scripts/run_l2.sh
+bash scripts/run_ts.sh
+```
+
+# Troubleshooting
+
+- If `import mujoco_py` fails after package reinstalls, rerun `source scripts/setup_pldm_env.sh --rebuild`.
+- If rendering fails with EGL or GLEW errors, confirm `MUJOCO_GL=egl`, `LD_LIBRARY_PATH` includes `$HOME/.mujoco/mujoco-2.1.2/bin`, and the conda/native deps above are installed.
+- If training cannot find data, confirm `data.p` and `images.npy` exist under `pldm_envs/diverse_maze/datasets/...`, or override `data.d4rl_config.path` and `data.d4rl_config.images_path` in the command.
